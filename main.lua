@@ -7,7 +7,6 @@
 -- ============================================================
 -- 0. Global Settings & Services
 -- ============================================================
-local HYBRID_MODE = true
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
@@ -92,7 +91,6 @@ local function applyStats(applyAll)
         t.Ammo = 1e6
     end
     
-    -- Only Bullets is sent now
     if (applyAll or acs.bulletOn ~= lastAppliedState.bulletOn) and acs.bulletOn then
         t.Bullets = acs.bullets
     end
@@ -272,7 +270,10 @@ killSetup:Slider("Teleport Height", 3100, 50, 500, 5000, " studs", function(v) k
 -- 7. Kill Player Logic
 -- ============================================================
 local function killPlayer(targetUsername)
-    if not HYBRID_MODE then notify("Warfare Tycoon", "Hybrid Mode is disabled.", 3) return end
+    if not HYBRID_MODE then 
+        notify("Warfare Tycoon", "Enable Hybrid Mode for better features!", 4)
+        return 
+    end
     
     task.spawn(function()
         local FireGun = RS:WaitForChild("BulletFireSystem"):WaitForChild("FireGun")
@@ -370,7 +371,13 @@ local function plotsSignature(list)
 end
 
 local playersLocalSection = playersTab:Section("Local Player", "Full")
-playersLocalSection:Button("Kill Self", function() killPlayer(localPlayer.Name) end)
+
+-- Kill Self Button (Hybrid Check)
+local killSelfBtn = playersLocalSection:Button("Kill Self", function() 
+    killPlayer(localPlayer.Name) 
+end)
+if not HYBRID_MODE then killSelfBtn:SetText("Kill Self [Locked - Requires Hybrid]") end
+
 local playersLocalLabel = playersLocalSection:Label("—")
 
 local PLAYER_POOL = 10
@@ -380,7 +387,13 @@ for i = 1, PLAYER_POOL do
 	local nameLbl = sec:Label(" ")
 	sec:Divider("Actions")
 	local currentTarget = nil
-	sec:Button("Kill Player", function() if currentTarget then killPlayer(currentTarget) else notify("Warfare Tycoon", "No player in this slot.", 3) end end)
+	
+	-- Kill Player Button (Hybrid Check)
+	local killBtn = sec:Button("Kill Player", function() 
+        if currentTarget then killPlayer(currentTarget) else notify("Warfare Tycoon", "No player in this slot.", 3) end 
+    end)
+    if not HYBRID_MODE then killBtn:SetText("Kill Player [Locked]") end
+    
 	playerCards[i] = { section = sec, nameLbl = nameLbl, setTarget = function(t) currentTarget = t end }
 end
 

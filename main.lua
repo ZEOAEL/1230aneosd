@@ -11,6 +11,10 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local localPlayer = Players.LocalPlayer
+local HYBRID_MODE = false
+if _G.hybrid ~= nil then
+    HYBRID_MODE = _G.hybrid
+end
 
 local Lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/neaxusxgod-png/INS-ui/main/uilib.min.lua"))() or INSUI
 

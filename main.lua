@@ -68,11 +68,9 @@ local function popup(title, text, duration, kind)
     lastNotifyAt[title] = now
 
     if HAS_MATCHA_NOTIFY then
-        -- Matcha: notify(message, title, duration)
         pcall(notify, text, title, duration)
         return
     end
-    -- Fallback for non-Matcha executors
     pcall(function()
         if Lib and type(Lib.Notify) == "function" then
             Lib:Notify(title, text, duration, kind or "info")
@@ -98,9 +96,19 @@ local whitelist = {}
 local sortOptions = { "No Sort", "Distance", "Name (A-Z)", "Name (Z-A)" }
 local sortIndex = { players = 2, bases = 2 }
 
+-- Empty string "" = UNBOUND. Only apply/killSelf have defaults; every teleport
+-- starts unbound so users opt in per-action via the "X key" widget.
 local boundKeys = {
     applyNew = "f2", applyAll = "f3", refresh = "f4",
-    killSelf = "k", tpBase = "f5", tpCapture = "f6",
+    killSelf = "k",
+    tpBase = "", tpCapture = "", tpOil1 = "", tpOil2 = "", tpOil3 = "",
+}
+
+-- Complete list of possible action names — used to pre-seed prevKeyDown so
+-- unbound-then-bound keys don't fire on the first poll after binding.
+local ALL_ACTION_NAMES = {
+    "applyNew", "applyAll", "refresh", "killSelf",
+    "tpBase", "tpCapture", "tpOil1", "tpOil2", "tpOil3",
 }
 
 local VK = {
@@ -118,11 +126,11 @@ local VK = {
     leftalt=0xA4, rightalt=0xA5,
 }
 
--- Memoized VK lookup so the poll loop doesn't re-do string ops every tick.
 local vkMemo = {}
 local function keyNameToVK(raw)
     if not raw then return nil end
     local s = string.lower(tostring(raw))
+    if s == "" or s == "none" or s == "nil" then return nil end
     if vkMemo[s] ~= nil then return vkMemo[s] or nil end
     local cleaned = s:gsub("%s+", ""):gsub("keycode", ""):gsub("^enum", "")
     local digitMap = { one="1", two="2", three="3", four="4", five="5",
@@ -363,6 +371,7 @@ local function guardedAction(name, fn)
     pcall(fn)
 end
 
+-- Keep default-bound helper for Apply/KillSelf.
 local function registerHotkey(parent, actionName, label, defaultKey, actionFn)
     local toggle = parent:Toggle(label .. " hotkey", true, function() end)
     local regTime = tick()
@@ -373,8 +382,11 @@ local function registerHotkey(parent, actionName, label, defaultKey, actionFn)
     keybindToggles[actionName] = toggle
 
     parent:Keybind(label .. " key", defaultKey, function(key)
-        boundKeys[actionName] = string.lower(tostring(key))
-        vkMemo[string.lower(tostring(key))] = nil
+        local kk = string.lower(tostring(key or ""))
+        local newKey = (kk ~= "" and kk ~= "none" and kk ~= "nil") and kk or ""
+        boundKeys[actionName] = newKey
+        if newKey ~= "" then vkMemo[newKey] = nil end
+        prevKeyDown[actionName] = true
     end)
 end
 
@@ -681,8 +693,11 @@ end)
 keybindToggles.killSelf = killSelfToggle
 
 playersLocalSection:Keybind("Kill Self key", "k", function(key)
-    boundKeys.killSelf = string.lower(tostring(key))
-    vkMemo[string.lower(tostring(key))] = nil
+    local kk = string.lower(tostring(key or ""))
+    local newKey = (kk ~= "" and kk ~= "none" and kk ~= "nil") and kk or ""
+    boundKeys.killSelf = newKey
+    if newKey ~= "" then vkMemo[newKey] = nil end
+    prevKeyDown.killSelf = true
 end)
 
 local playersLocalLabel = playersLocalSection:Label("—")
@@ -804,9 +819,17 @@ end
 -- ============================================================
 -- 10.5 Teleports Tab
 -- ============================================================
+-- Entry shape:
+--   * name         : label for button + toast
+--   * position     : Vector3 → teleport to pos + (0,5,0)
+--   * cframe       : CFrame  → exact position + rotation
+--   * cameraCFrame : CFrame  → optional, snaps camera for ~0.1s
+--   * dynamic      : fn → returns Vector3/CFrame or (nil, "reason")
+--   * defaultKey   : "" or nil = UNBOUND by default; user opts in via widget
 local teleports = {
     base = {
         name = "My Base",
+        defaultKey = "",
         dynamic = function()
             scanStructure()
             updateDistances()
@@ -819,59 +842,180 @@ local teleports = {
             return mine.basePos
         end,
     },
+
     capture = {
         name = "Capture Point",
+        defaultKey = "",
         position = Vector3.new(-502.4330, 177.0361, -1022.2966),
+    },
+
+    oil1 = {
+        name = "Oil 1",
+        defaultKey = "",
+        cframe = CFrame.new(
+            1705.9021, 120.9477, 3777.9307,
+            -0.9991, -0.0000, -0.0427,
+            -0.0000,  1.0000, -0.0000,
+             0.0427, -0.0000, -0.9991
+        ),
+        cameraCFrame = CFrame.new(
+            1705.1234, 129.7897, 3759.5476,
+            -0.9991,  0.0157, -0.0393,
+             0.0000,  0.9288,  0.3706,
+             0.0423,  0.3703, -0.9280
+        ),
+    },
+
+    oil2 = {
+        name = "Oil 2",
+        defaultKey = "",
+        cframe = CFrame.new(
+            -1936.6952, 120.9477, -3698.1614,
+             0.9998, -0.0000,  0.0219,
+             0.0000,  1.0000,  0.0000,
+            -0.0219, -0.0000,  0.9998
+        ),
+        cameraCFrame = CFrame.new(
+            -1935.3724, 134.9026, -3682.8127,
+             0.9963, -0.0540,  0.0668,
+             0.0000,  0.7776,  0.6287,
+            -0.0859, -0.6264,  0.7748
+        ),
+    },
+
+    oil3 = {
+        name = "Oil 3",
+        defaultKey = "",
+        cframe = CFrame.new(
+            -1209.5551, 72.6963, -880.2206,
+             0.7541, -0.0000, -0.6567,
+            -0.0000,  1.0000, -0.0000,
+             0.6567,  0.0000,  0.7541
+        ),
+        cameraCFrame = CFrame.new(
+            -1220.2773, 82.4751, -871.3811,
+             0.6361,  0.3949, -0.6629,
+             0.0000,  0.8591,  0.5118,
+             0.7716, -0.3256,  0.5465
+        ),
     },
 }
 
 local tpSection = teleportsTab:Section("Teleports", "Left", "action + rebindable hotkey")
-local tpInfo    = teleportsTab:Section("Info", "Right", "how to add more")
+local tpInfo    = teleportsTab:Section("Info", "Right", "how keybinds + adding work")
 
 local function doTeleport(key)
     local entry = teleports[key]
-    if not entry then popup("Warfare Tycoon", "Unknown teleport: " .. tostring(key), 2, "warning") return end
+    if not entry then
+        popup("Warfare Tycoon", "Unknown teleport: " .. tostring(key), 2, "warning")
+        return
+    end
+
     local myChar = workspace:FindFirstChild(localPlayer.Name)
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then popup("Warfare Tycoon", "Character not loaded.", 2, "warning") return end
-    local targetPos, errMsg
-    if entry.dynamic then
+    if not myRoot then
+        popup("Warfare Tycoon", "Character not loaded.", 2, "warning")
+        return
+    end
+
+    local targetCFrame
+    if entry.cframe then
+        targetCFrame = entry.cframe
+    elseif entry.position then
+        local p = entry.position
+        targetCFrame = CFrame.new(p.X, p.Y + 5, p.Z)
+    elseif entry.dynamic then
         local ok, res, err = pcall(entry.dynamic)
-        if not ok then popup("Warfare Tycoon", entry.name .. ": " .. tostring(res), 3, "error") return end
-        targetPos, errMsg = res, err
-    else targetPos = entry.position end
-    if not targetPos then popup("Warfare Tycoon", entry.name .. ": " .. (errMsg or "no position set."), 3, "warning") return end
+        if not ok then
+            popup("Warfare Tycoon", entry.name .. ": " .. tostring(res), 3, "error")
+            return
+        end
+        if not res then
+            popup("Warfare Tycoon", entry.name .. ": " .. (err or "no position."), 3, "warning")
+            return
+        end
+        if typeof(res) == "CFrame" then
+            targetCFrame = res
+        else
+            targetCFrame = CFrame.new(res.X, res.Y + 5, res.Z)
+        end
+    end
+
+    if not targetCFrame then
+        popup("Warfare Tycoon", entry.name .. ": no position set.", 2, "warning")
+        return
+    end
+
     pcall(function()
-        myRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y + 5, targetPos.Z)
+        myRoot.CFrame = targetCFrame
         myRoot.Velocity = Vector3.zero
     end)
+
+    if entry.cameraCFrame then
+        task.defer(function()
+            local cam = workspace.CurrentCamera
+            if not cam then return end
+            local oldType = cam.CameraType
+            pcall(function()
+                cam.CameraType = Enum.CameraType.Scriptable
+                cam.CFrame = entry.cameraCFrame
+            end)
+            task.delay(0.1, function()
+                pcall(function()
+                    if cam and cam.CameraType == Enum.CameraType.Scriptable then
+                        cam.CameraType = oldType
+                    end
+                end)
+            end)
+        end)
+    end
+
     popup("Warfare Tycoon", "Teleported to " .. entry.name .. ".", 2, "success")
 end
 
-local tpOrder = { "base", "capture" }
-local tpBindKey = { base = "tpBase",   capture = "tpCapture"   }
-local tpDefault  = { base = "f5",       capture = "f6"         }
+local tpOrder = { "base", "capture", "oil1", "oil2", "oil3" }
+local tpBindKey = {
+    base = "tpBase", capture = "tpCapture",
+    oil1 = "tpOil1", oil2 = "tpOil2", oil3 = "tpOil3",
+}
 
 for _, key in ipairs(tpOrder) do
     local entry = teleports[key]
     if entry then
+        local actionName = tpBindKey[key]
         tpSection:Button("Teleport: " .. entry.name, function() doTeleport(key) end)
-        local toggle = tpSection:Toggle(entry.name .. " hotkey", true, function() end)
-        local regTime = tick()
-        toggle:AddKeybind(tpDefault[key], "Hold", function(on)
-            if tick() - regTime < 1.0 then return end
-            if on then guardedAction(tpBindKey[key], function() doTeleport(key) end) end
-        end)
-        keybindToggles[tpBindKey[key]] = toggle
 
-        tpSection:Keybind(entry.name .. " key", tpDefault[key], function(k)
-            boundKeys[tpBindKey[key]] = string.lower(tostring(k))
-            vkMemo[string.lower(tostring(k))] = nil
+        local toggle = tpSection:Toggle(entry.name .. " hotkey", true, function() end)
+        keybindToggles[actionName] = toggle
+
+        -- Only register :AddKeybind() if a default key is set.
+        -- Empty defaultKey ⇒ no Settings entry until user binds via :Keybind() widget.
+        if entry.defaultKey and entry.defaultKey ~= "" then
+            local regTime = tick()
+            pcall(function()
+                toggle:AddKeybind(entry.defaultKey, "Hold", function(on)
+                    if tick() - regTime < 1.0 then return end
+                    if on then guardedAction(actionName, function() doTeleport(key) end) end
+                end)
+            end)
+            boundKeys[actionName] = string.lower(tostring(entry.defaultKey))
+        else
+            boundKeys[actionName] = "" -- unbound
+        end
+
+        -- Rebind widget: user opts in here. Empty input = unbind.
+        tpSection:Keybind(entry.name .. " key", entry.defaultKey or "", function(k)
+            local kk = string.lower(tostring(k or ""))
+            local newKey = (kk ~= "" and kk ~= "none" and kk ~= "nil") and kk or ""
+            boundKeys[actionName] = newKey
+            if newKey ~= "" then vkMemo[newKey] = nil end
+            prevKeyDown[actionName] = true -- skip this frame so bind doesn't instantly fire
         end)
     end
 end
 
-tpInfo:Info("Experimental use only.")
+tpInfo:Info("All teleports start with NO keybind — set only what you need.")
+tpInfo:Info("Click the 'X key' row to bind a key. Clear the field to unbind.")
 tpInfo:Info("DM zerkly_ on discord for teleport recommendations...")
 
 -- ============================================================
@@ -883,6 +1027,9 @@ keyActions.refresh   = doRefresh
 keyActions.killSelf  = function() killPlayer(localPlayer.Name) end
 keyActions.tpBase    = function() doTeleport("base") end
 keyActions.tpCapture = function() doTeleport("capture") end
+keyActions.tpOil1    = function() doTeleport("oil1") end
+keyActions.tpOil2    = function() doTeleport("oil2") end
+keyActions.tpOil3    = function() doTeleport("oil3") end
 
 local hasMatchaInput = (type(iskeypressed) == "function")
 local hasActiveCheck = (type(isrbxactive) == "function")
@@ -901,9 +1048,10 @@ end)
 
 if hasMatchaInput then
     task.spawn(function()
-        -- Wait for startup notifs to finish (last one fires at ~t=8s).
+        -- Wait for startup notifs to finish. Poll loop covers every action name
+        -- (bound or not) so binding a key later can't accidentally fire.
         task.wait(5)
-        for name in pairs(boundKeys) do
+        for _, name in ipairs(ALL_ACTION_NAMES) do
             prevKeyDown[name] = true
         end
         print("[Keybinds] Polling loop started.")
@@ -914,7 +1062,8 @@ if hasMatchaInput then
                 if okActive and a ~= nil then active = (a == true) end
             end
             if active then
-                for actionName, rawKey in pairs(boundKeys) do
+                for _, actionName in ipairs(ALL_ACTION_NAMES) do
+                    local rawKey = boundKeys[actionName]
                     local vk = keyNameToVK(rawKey)
                     if vk then
                         local okDown, raw = pcall(iskeypressed, vk)
@@ -934,6 +1083,9 @@ if hasMatchaInput then
                             end
                         end
                         prevKeyDown[actionName] = down
+                    else
+                        -- Unbound: keep the "was up" state so binding later is safe
+                        prevKeyDown[actionName] = true
                     end
                 end
             end
@@ -945,9 +1097,10 @@ else
         if gameProcessed then return end
         if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
         local pressed = string.lower(tostring(input.KeyCode.Name))
-        for name, key in pairs(boundKeys) do
-            if key and string.lower(tostring(key)) == pressed and keyActions[name] then
-                task.spawn(keyActions[name])
+        for _, actionName in ipairs(ALL_ACTION_NAMES) do
+            local key = boundKeys[actionName]
+            if key and key ~= "" and string.lower(tostring(key)) == pressed and keyActions[actionName] then
+                task.spawn(keyActions[actionName])
                 return
             end
         end
@@ -1009,11 +1162,10 @@ cav:Info("Base distances update every 1s (spawn visualizer).")
 cav:Info("New players/bases detected every 3s.")
 cav:Info("Whitelisted players are skipped by kill features.")
 cav:Info("Hotkeys fire via Matcha iskeypressed() polling — only while Roblox is focused.")
+cav:Info("Apply New / Apply All / Refresh default to F2/F3/F4. Kill Self to K.")
+cav:Info("Teleports start UNBOUND — bind them from the Teleports tab per-action.")
 cav:Info("Uses Matcha's native notify when available (fast, no INSUI frame building).")
-cav:Info("If fall-damage/overheat apply feels slow the first time, click Refresh Caches once.")
 
--- Startup notifications — native Matcha toasts, spaced 2.5s apart so nothing
--- overlaps with UI building. Poll loop waits until t=5s so it can't compete.
 task.spawn(function()
     popup("Warfare Tycoon", "Created By zerkly_, Make sure to vote a star in discord!", 10.5, "success")
     task.wait(1.5)

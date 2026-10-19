@@ -1,4 +1,4 @@
---[[ Arsenal — Warfare Tycoon weapon data v1.2
+--[[ Arsenal — Warfare Tycoon weapon data v1.3
      Returns a structured table of every known weapon's
      fire payloads, equip payloads, and config values.
      
@@ -204,4 +204,5 @@ function Arsenal.retarget(payload, fromUser, toUser)
     return (payload:gsub(fromUser, toUser))
 end
 
+_G.Arsenal = Arsenal
 return Arsenal

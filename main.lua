@@ -1153,8 +1153,9 @@ end)
 -- ============================================================
 local about = notesTab:Section("Credits", "Left", "who built what")
 about:Label("Menu: zerkly_")
+about:Label("Arsenal: " .. (Arsenal and "Loaded" or "Failed to load") .. " - zerkly_")
 about:Label("UI: inspecttor (INS UI)")
-about:Label("Arsenal: " .. (Arsenal and "Loaded" or "Failed to load"))
+about:Label("Contributors: len9i, 0x11c")
 
 local cav = notesTab:Section("Caveats", "Right", "behaviour you should know")
 cav:Info("Player distances update every 1s (live character position).")
@@ -1166,14 +1167,21 @@ cav:Info("Apply New / Apply All / Refresh default to F2/F3/F4. Kill Self to K.")
 cav:Info("Teleports start UNBOUND — bind them from the Teleports tab per-action.")
 cav:Info("Uses Matcha's native notify when available (fast, no INSUI frame building).")
 
+
+-- Startup notification sequence:
+--   * First fires immediately at t=0 (dur 11s) → ends at t=11
+--   * Last  fires at t=6 (dur 5s)              → ends at t=11 (same moment)
+--   * 1.5s spacing between every popup
 task.spawn(function()
-    popup("Warfare Tycoon", "Created By zerkly_, Make sure to vote a star in discord!", 10.5, "success")
+    popup("Warfare Tycoon", "Created By zerkly_, Make sure to vote a star in discord!", 12, "success")
     task.wait(1.5)
     if Arsenal then
         popup("Arsenal", "Loaded " .. #Arsenal.listAll() .. " weapons (v" .. tostring(Arsenal.Version) .. ")", 5, "info")
     end
     task.wait(1.5)
     popup("UI", "UI Created by - inspecttor", 5, "info")
+    task.wait(1.5)
+    popup("Contributors", "len9i, 0x11c", 5, "info")
     task.wait(1.5)
     popup("Warfare Tycoon", "Ready to use! Press P for the menu.", 5, "info")
 end)

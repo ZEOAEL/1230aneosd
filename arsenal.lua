@@ -1,4 +1,4 @@
---[[ Arsenal — Warfare Tycoon weapon data
+--[[ Arsenal — Warfare Tycoon weapon data v1.2
      Returns a structured table of every known weapon's
      fire payloads, equip payloads, and config values.
      
